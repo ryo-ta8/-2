@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>式次第タイマー</title>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+  <style>
+    body {
+      background-color: #f8f9fa;
+    }
+    .container {
+      margin-top: 30px;
+    }
+    .status {
+      font-size: 1.2rem;
+      font-weight: bold;
+      margin-top: 15px;
+    }
+    .action-buttons {
+      margin-top: 15px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1 class="text-center mb-4">式次第タイマー</h1>
+
+    <!-- 設定パネル -->
+    <div class="card mb-4">
+      <div class="card-header">式次番号設定</div>
+      <div class="card-body">
+        <div class="form-row align-items-end">
+          <div class="form-group col-md-3">
+            <label for="startNumber">開始番号</label>
+            <input type="number" class="form-control" id="startNumber" placeholder="例：1" min="1" step="1">
+          </div>
+          <div class="form-group col-md-3">
+            <label for="endNumber">終了番号</label>
+            <input type="number" class="form-control" id="endNumber" placeholder="例：10" min="1" step="1">
+          </div>
+          <div class="form-group col-md-3">
+            <button id="createTableBtn" class="btn btn-primary btn-block">テーブル作成</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 状態表示エリア -->
+    <div id="globalStatus" class="status text-center text-info">計測待機中</div>
+
+    <!-- 記録テーブル表示エリア -->
+    <div id="tableArea"></div>
+
+    <!-- リセット・保存ボタン -->
+    <div class="action-buttons text-center">
+      <button id="resetBtn" class="btn btn-warning mr-3">リセット</button>
+      <button id="saveBtn" class="btn btn-success">保存</button>
+    </div>
+  </div>
+
+  <script>
+    let currentEvent = { number: null, startTime: null };
+
+    function formatTimeOnly(date) {
+      const pad = (n) => ('0' + n).slice(-2);
+      return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
+
+    function getDurationString(start, end) {
+      let diff = Math.floor((end - start) / 1000);
+      const m = ('0' + Math.floor(diff / 60)).slice(-2);
+      const s = ('0' + (diff % 60)).slice(-2);
+      return `${m}:${s}`;
+    }
+
+    document.getElementById("createTableBtn").addEventListener("click", function () {
+      const start = parseInt(document.getElementById("startNumber").value);
+      const end = parseInt(document.getElementById("endNumber").value);
+      if (isNaN(start) || isNaN(end) || start > end) {
+        alert("開始番号と終了番号を正しく入力してください。");
+        return;
+      }
+
+      let html = '';
+      html += '<div class="card">';
+      html += '<div class="card-header">式次記録テーブル (' + start + ' ～ ' + end + ')</div>';
+      html += '<div class="card-body p-0">';
+      html += '<table class="table table-bordered table-hover m-0">';
+      html += '<thead class="thead-light">';
+      html += '<tr><th>式次番号</th><th>内容</th><th>開始</th><th>終了</th><th>所要時間</th><th>操作</th></tr>';
+      html += '</thead><tbody>';
+      for (let i = start; i <= end; i++) {
+        html += '<tr id="row-' + i + '">';
+        html += '<td>' + i + '</td>';
+        html += '<td><input type="text" class="form-control form-control-sm" id="content-' + i + '" placeholder="内容を入力"></td>';
+        html += '<td id="start-' + i + '">-</td>';
+        html += '<td id="stop-' + i + '">-</td>';
+        html += '<td id="duration-' + i + '">-</td>';
+        html += '<td>';
+        html += '<button class="btn btn-sm btn-success" onclick="startTimer(' + i + ')" id="btn-start-' + i + '">Start</button>';
+        html += '<button class="btn btn-sm btn-danger" onclick="stopTimer(' + i + ')" id="btn-stop-' + i + '" disabled>Stop</button>';
+        html += '</td></tr>';
+      }
+      html += '</tbody></table></div></div>';
+      document.getElementById("tableArea").innerHTML = html;
+      currentEvent = { number: null, startTime: null };
+      document.getElementById("globalStatus").textContent = "テーブル作成完了。計測待機中";
+    });
+
+    function startTimer(n) {
+      if (currentEvent.startTime !== null) {
+        alert("式次 " + currentEvent.number + " が進行中です。");
+        return;
+      }
+      const now = new Date();
+      document.getElementById("start-" + n).textContent = formatTimeOnly(now);
+      document.getElementById("btn-start-" + n).disabled = true;
+      document.getElementById("btn-stop-" + n).disabled = false;
+      currentEvent = { number: n, startTime: now };
+      document.getElementById("globalStatus").textContent = `式次 ${n} の計測開始: ${formatTimeOnly(now)}`;
+    }
+
+    function stopTimer(n) {
+      if (currentEvent.number !== n) {
+        alert("この式次は現在計測中ではありません。");
+        return;
+      }
+      const now = new Date();
+      const start = currentEvent.startTime;
+      document.getElementById("stop-" + n).textContent = formatTimeOnly(now);
+      document.getElementById("duration-" + n).textContent = getDurationString(start, now);
+      document.getElementById("btn-stop-" + n).disabled = true;
+      currentEvent = { number: null, startTime: null };
+      document.getElementById("globalStatus").textContent = `式次 ${n} の計測完了: 所要時間 ${getDurationString(start, now)}`;
+    }
+
+    document.getElementById("resetBtn").addEventListener("click", () => {
+      document.querySelectorAll("tr[id^='row-']").forEach(row => {
+        const n = row.id.split("-")[1];
+        document.getElementById("start-" + n).textContent = "-";
+        document.getElementById("stop-" + n).textContent = "-";
+        document.getElementById("duration-" + n).textContent = "-";
+        document.getElementById("content-" + n).value = "";
+        document.getElementById("btn-start-" + n).disabled = false;
+        document.getElementById("btn-stop-" + n).disabled = true;
+      });
+      currentEvent = { number: null, startTime: null };
+      document.getElementById("globalStatus").textContent = "リセット完了";
+    });
+
+    document.getElementById("saveBtn").addEventListener("click", () => {
+      let csv = "式次番号,内容,開始時刻,終了時刻,所要時間\n";
+      document.querySelectorAll("tr[id^='row-']").forEach(row => {
+        const n = row.id.split("-")[1];
+        const content = document.getElementById("content-" + n).value;
+        const start = document.getElementById("start-" + n).textContent;
+        const stop = document.getElementById("stop-" + n).textContent;
+        const duration = document.getElementById("duration-" + n).textContent;
+        csv += `${n},"${content}",${start},${stop},${duration}\n`;
+      });
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.setAttribute("download", "shikijidai_records.csv");
+
+      if (typeof a.download === "undefined") {
+        window.location.href = url;
+      } else {
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
+      URL.revokeObjectURL(url);
+    });
+
+    window.startTimer = startTimer;
+    window.stopTimer = stopTimer;
+  </script>
+</body>
+</html>
