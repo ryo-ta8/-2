@@ -19,7 +19,7 @@
       --blue: #2f6f9f;
       --red: #b84a42;
       --shadow: 0 12px 30px rgba(31, 41, 51, 0.16);
-      --magnet-size: auto;
+      --magnet-size: 58px;
       font-family: "Yu Gothic", "Meiryo", system-ui, sans-serif;
     }
 
@@ -802,31 +802,76 @@
       }
 
       const grids = Array.from(els.board.querySelectorAll(".magnet-grid"));
-      const maxItems = Math.max(1, ...grids.map((grid) => grid.querySelectorAll(".magnet-wrap").length));
-      const firstGrid = grids.find((grid) => grid.querySelector(".magnet-wrap"));
-      const gridRect = firstGrid ? firstGrid.getBoundingClientRect() : null;
+      const measuredGrids = grids
+        .map((grid) => ({
+          grid,
+          count: grid.querySelectorAll(".magnet-wrap").length,
+          rect: grid.getBoundingClientRect()
+        }))
+        .filter((item) => item.count > 0 && item.rect.width > 0 && item.rect.height > 0);
 
-      if (!gridRect || gridRect.width <= 0 || gridRect.height <= 0) return;
+      if (measuredGrids.length === 0) return;
 
-      const size = calculateMagnetSize(gridRect.width, gridRect.height, maxItems);
-      const gap = Math.max(2, Math.min(7, Math.floor(size * 0.12)));
+      const size = Math.min(
+        ...measuredGrids.map((item) => calculateMagnetSize(item.rect.width, item.rect.height, item.count))
+      );
+      const gap = calculateMagnetGap(size);
 
       els.board.style.setProperty("--magnet-size", `${size}px`);
       els.board.style.setProperty("--magnet-gap", `${gap}px`);
+      window.requestAnimationFrame(() => shrinkIfOverflow(size));
     }
 
     function calculateMagnetSize(width, height, count) {
-      let best = 18;
+      const safeWidth = Math.max(0, width - 8);
+      const safeHeight = Math.max(0, height - 8);
+      const maxSize = Math.floor(Math.min(74, safeWidth, safeHeight));
 
-      for (let columns = 1; columns <= count; columns += 1) {
-        const rows = Math.ceil(count / columns);
-        const gapGuess = 6;
-        const cellWidth = (width - gapGuess * (columns - 1)) / columns;
-        const cellHeight = (height - gapGuess * (rows - 1)) / rows;
-        best = Math.max(best, Math.min(cellWidth, cellHeight));
+      for (let size = maxSize; size >= 12; size -= 1) {
+        const gap = calculateMagnetGap(size);
+
+        for (let columns = 1; columns <= count; columns += 1) {
+          const rows = Math.ceil(count / columns);
+          const neededWidth = columns * size + (columns - 1) * gap;
+          const neededHeight = rows * size + (rows - 1) * gap;
+
+          if (neededWidth <= safeWidth && neededHeight <= safeHeight) {
+            return size;
+          }
+        }
       }
 
-      return Math.floor(Math.max(18, Math.min(74, best)));
+      return 12;
+    }
+
+    function calculateMagnetGap(size) {
+      return Math.max(2, Math.min(7, Math.floor(size * 0.12)));
+    }
+
+    function shrinkIfOverflow(currentSize) {
+      const shouldFit = pseudoFullscreen || Boolean(document.fullscreenElement);
+      if (!shouldFit) return;
+
+      let size = currentSize;
+      let attempts = 0;
+
+      while (size > 10 && hasBoardOverflow() && attempts < 30) {
+        size -= 1;
+        els.board.style.setProperty("--magnet-size", `${size}px`);
+        els.board.style.setProperty("--magnet-gap", `${calculateMagnetGap(size)}px`);
+        attempts += 1;
+      }
+    }
+
+    function hasBoardOverflow() {
+      const boardHasOverflow = els.board.scrollWidth > els.board.clientWidth + 1
+        || els.board.scrollHeight > els.board.clientHeight + 1;
+      if (boardHasOverflow) return true;
+
+      return Array.from(els.board.querySelectorAll(".stage, .magnet-grid")).some((element) => (
+        element.scrollWidth > element.clientWidth + 1
+        || element.scrollHeight > element.clientHeight + 1
+      ));
     }
 
     els.apply.addEventListener("click", applySettings);
