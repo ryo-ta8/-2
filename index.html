@@ -37,6 +37,10 @@
       color: var(--ink);
     }
 
+    body.no-scroll {
+      overflow: hidden;
+    }
+
     button,
     input {
       font: inherit;
@@ -51,6 +55,18 @@
       min-height: 100vh;
       display: grid;
       grid-template-rows: auto 1fr;
+    }
+
+    .app.pseudo-fullscreen {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      overflow: auto;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,0.34) 1px, transparent 1px),
+        linear-gradient(rgba(255,255,255,0.34) 1px, transparent 1px),
+        var(--paper);
+      background-size: 28px 28px;
     }
 
     .toolbar {
@@ -411,6 +427,7 @@
       end: document.querySelector("#endNumber"),
       stages: document.querySelector("#stageTotal"),
       apply: document.querySelector("#applyButton"),
+      app: document.querySelector(".app"),
       fullscreen: document.querySelector("#fullscreenButton"),
       undo: document.querySelector("#undoButton"),
       reset: document.querySelector("#resetButton"),
@@ -423,6 +440,7 @@
     const storageKey = "school-progress-magnet-board";
     let state = loadState();
     let toastTimer = null;
+    let pseudoFullscreen = false;
 
     function loadState() {
       try {
@@ -640,19 +658,45 @@
     }
 
     async function toggleFullscreen() {
-      try {
-        if (!document.fullscreenElement) {
-          await document.documentElement.requestFullscreen();
-        } else {
-          await document.exitFullscreen();
-        }
-      } catch {
-        showToast("全画面にできませんでした");
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+        return;
       }
+
+      if (pseudoFullscreen) {
+        setPseudoFullscreen(false);
+        return;
+      }
+
+      const requestFullscreen = els.app.requestFullscreen
+        || els.app.webkitRequestFullscreen
+        || els.app.msRequestFullscreen;
+
+      if (requestFullscreen) {
+        try {
+          await requestFullscreen.call(els.app);
+          updateFullscreenButton();
+          return;
+        } catch {
+          setPseudoFullscreen(true);
+          showToast("画面いっぱいにしました");
+          return;
+        }
+      }
+
+      setPseudoFullscreen(true);
+      showToast("画面いっぱいにしました");
+    }
+
+    function setPseudoFullscreen(enabled) {
+      pseudoFullscreen = enabled;
+      els.app.classList.toggle("pseudo-fullscreen", enabled);
+      document.body.classList.toggle("no-scroll", enabled);
+      updateFullscreenButton();
     }
 
     function updateFullscreenButton() {
-      const isFullscreen = Boolean(document.fullscreenElement);
+      const isFullscreen = Boolean(document.fullscreenElement) || pseudoFullscreen;
       els.fullscreen.textContent = isFullscreen ? "□" : "⛶";
       els.fullscreen.title = isFullscreen ? "全画面を終了" : "全画面表示";
       els.fullscreen.setAttribute("aria-label", els.fullscreen.title);
@@ -669,12 +713,25 @@
     els.fullscreen.addEventListener("click", toggleFullscreen);
     els.undo.addEventListener("click", undo);
     els.reset.addEventListener("click", resetBoard);
-    document.addEventListener("fullscreenchange", updateFullscreenButton);
+    document.addEventListener("fullscreenchange", () => {
+      if (document.fullscreenElement) {
+        setPseudoFullscreen(false);
+      } else {
+        updateFullscreenButton();
+      }
+    });
+    document.addEventListener("webkitfullscreenchange", updateFullscreenButton);
 
     [els.start, els.end, els.stages].forEach((input) => {
       input.addEventListener("keydown", (event) => {
         if (event.key === "Enter") applySettings();
       });
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && pseudoFullscreen) {
+        setPseudoFullscreen(false);
+      }
     });
 
     render();
