@@ -19,6 +19,7 @@
       --blue: #2f6f9f;
       --red: #b84a42;
       --shadow: 0 12px 30px rgba(31, 41, 51, 0.16);
+      --magnet-size: auto;
       font-family: "Yu Gothic", "Meiryo", system-ui, sans-serif;
     }
 
@@ -61,12 +62,31 @@
       position: fixed;
       inset: 0;
       z-index: 50;
+      min-height: 100dvh;
       overflow: auto;
       background:
         linear-gradient(90deg, rgba(255,255,255,0.34) 1px, transparent 1px),
         linear-gradient(rgba(255,255,255,0.34) 1px, transparent 1px),
         var(--paper);
       background-size: 28px 28px;
+    }
+
+    .app.fit-board {
+      overflow: hidden;
+    }
+
+    .app.fit-board .toolbar {
+      padding-block: clamp(8px, 1.5vh, 14px);
+    }
+
+    .app.fit-board .board-wrap {
+      min-height: 0;
+      padding-block: clamp(8px, 1.5vh, 14px);
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    .app.fit-board .status {
+      font-size: clamp(0.78rem, 1.3vw, 0.95rem);
     }
 
     .toolbar {
@@ -150,6 +170,7 @@
       padding: clamp(14px, 3vw, 28px);
       display: grid;
       gap: 14px;
+      min-height: 0;
     }
 
     .status {
@@ -193,6 +214,15 @@
       overflow-x: auto;
     }
 
+    .app.fit-board .board {
+      min-height: 0;
+      height: 100%;
+      overflow: hidden;
+      gap: clamp(5px, 0.9vw, 10px);
+      padding: clamp(6px, 1vw, 12px);
+      grid-template-columns: repeat(var(--stage-count), minmax(0, 1fr));
+    }
+
     .stage {
       min-width: 150px;
       display: grid;
@@ -202,6 +232,13 @@
       border: 2px solid rgba(255, 255, 255, 0.42);
       border-radius: 8px;
       background: rgba(255, 255, 255, 0.08);
+    }
+
+    .app.fit-board .stage {
+      min-width: 0;
+      gap: clamp(4px, 0.8vh, 8px);
+      padding: clamp(5px, 0.9vw, 9px);
+      overflow: hidden;
     }
 
     .stage-head {
@@ -221,6 +258,12 @@
       text-align: center;
     }
 
+    .app.fit-board .stage-title {
+      min-height: 0;
+      padding: clamp(4px, 0.7vh, 7px) 6px;
+      font-size: clamp(0.78rem, 1.5vw, 1.08rem);
+    }
+
     .stage-title input {
       width: 100%;
       min-width: 0;
@@ -238,6 +281,11 @@
       text-align: center;
     }
 
+    .app.fit-board .stage-count {
+      font-size: clamp(0.68rem, 1.2vw, 0.8rem);
+      line-height: 1;
+    }
+
     .magnet-grid {
       align-content: start;
       display: grid;
@@ -245,10 +293,22 @@
       gap: 9px;
     }
 
+    .app.fit-board .magnet-grid {
+      grid-template-columns: repeat(auto-fill, var(--magnet-size));
+      gap: var(--magnet-gap, 6px);
+      justify-content: center;
+      overflow: hidden;
+    }
+
     .magnet-wrap {
       position: relative;
       min-width: 0;
       aspect-ratio: 1;
+    }
+
+    .app.fit-board .magnet-wrap {
+      width: var(--magnet-size);
+      height: var(--magnet-size);
     }
 
     .magnet {
@@ -272,6 +332,10 @@
         0 5px 10px rgba(10, 30, 26, 0.28);
       user-select: none;
       transition: transform 100ms ease, box-shadow 100ms ease;
+    }
+
+    .app.fit-board .magnet {
+      font-size: clamp(0.68rem, calc(var(--magnet-size) * 0.42), 1.8rem);
     }
 
     .magnet:hover {
@@ -301,6 +365,15 @@
       font-size: 0.72rem;
       font-weight: 900;
       line-height: 1;
+    }
+
+    .app.fit-board .back-chip {
+      right: -2px;
+      top: -2px;
+      min-width: max(20px, calc(var(--magnet-size) * 0.48));
+      height: max(15px, calc(var(--magnet-size) * 0.32));
+      padding: 0 4px;
+      font-size: clamp(0.48rem, calc(var(--magnet-size) * 0.16), 0.68rem);
     }
 
     .back-chip:disabled {
@@ -441,6 +514,7 @@
     let state = loadState();
     let toastTimer = null;
     let pseudoFullscreen = false;
+    let fitTimer = null;
 
     function loadState() {
       try {
@@ -580,6 +654,7 @@
       });
 
       renderSummary();
+      scheduleFitMagnets();
     }
 
     function renderSummary() {
@@ -691,8 +766,10 @@
     function setPseudoFullscreen(enabled) {
       pseudoFullscreen = enabled;
       els.app.classList.toggle("pseudo-fullscreen", enabled);
+      els.app.classList.toggle("fit-board", enabled);
       document.body.classList.toggle("no-scroll", enabled);
       updateFullscreenButton();
+      scheduleFitMagnets();
     }
 
     function updateFullscreenButton() {
@@ -709,6 +786,49 @@
       toastTimer = window.setTimeout(() => els.toast.classList.remove("show"), 1300);
     }
 
+    function scheduleFitMagnets() {
+      window.clearTimeout(fitTimer);
+      fitTimer = window.setTimeout(fitMagnetsToBoard, 40);
+    }
+
+    function fitMagnetsToBoard() {
+      const shouldFit = pseudoFullscreen || Boolean(document.fullscreenElement);
+      els.app.classList.toggle("fit-board", shouldFit);
+
+      if (!shouldFit) {
+        els.board.style.removeProperty("--magnet-size");
+        els.board.style.removeProperty("--magnet-gap");
+        return;
+      }
+
+      const grids = Array.from(els.board.querySelectorAll(".magnet-grid"));
+      const maxItems = Math.max(1, ...grids.map((grid) => grid.querySelectorAll(".magnet-wrap").length));
+      const firstGrid = grids.find((grid) => grid.querySelector(".magnet-wrap"));
+      const gridRect = firstGrid ? firstGrid.getBoundingClientRect() : null;
+
+      if (!gridRect || gridRect.width <= 0 || gridRect.height <= 0) return;
+
+      const size = calculateMagnetSize(gridRect.width, gridRect.height, maxItems);
+      const gap = Math.max(2, Math.min(7, Math.floor(size * 0.12)));
+
+      els.board.style.setProperty("--magnet-size", `${size}px`);
+      els.board.style.setProperty("--magnet-gap", `${gap}px`);
+    }
+
+    function calculateMagnetSize(width, height, count) {
+      let best = 18;
+
+      for (let columns = 1; columns <= count; columns += 1) {
+        const rows = Math.ceil(count / columns);
+        const gapGuess = 6;
+        const cellWidth = (width - gapGuess * (columns - 1)) / columns;
+        const cellHeight = (height - gapGuess * (rows - 1)) / rows;
+        best = Math.max(best, Math.min(cellWidth, cellHeight));
+      }
+
+      return Math.floor(Math.max(18, Math.min(74, best)));
+    }
+
     els.apply.addEventListener("click", applySettings);
     els.fullscreen.addEventListener("click", toggleFullscreen);
     els.undo.addEventListener("click", undo);
@@ -716,11 +836,18 @@
     document.addEventListener("fullscreenchange", () => {
       if (document.fullscreenElement) {
         setPseudoFullscreen(false);
+        els.app.classList.add("fit-board");
+        scheduleFitMagnets();
       } else {
         updateFullscreenButton();
+        scheduleFitMagnets();
       }
     });
-    document.addEventListener("webkitfullscreenchange", updateFullscreenButton);
+    document.addEventListener("webkitfullscreenchange", () => {
+      updateFullscreenButton();
+      scheduleFitMagnets();
+    });
+    window.addEventListener("resize", scheduleFitMagnets);
 
     [els.start, els.end, els.stages].forEach((input) => {
       input.addEventListener("keydown", (event) => {
