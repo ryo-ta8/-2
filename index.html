@@ -130,33 +130,6 @@
       background: var(--blue);
     }
 
-    .mode-toggle {
-      display: inline-grid;
-      grid-template-columns: 1fr 1fr;
-      min-width: 132px;
-      height: 44px;
-      padding: 3px;
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      background: #e8edf2;
-      gap: 3px;
-    }
-
-    .mode-option {
-      min-width: 0;
-      border-radius: 4px;
-      background: transparent;
-      color: var(--muted);
-      font-size: 0.92rem;
-      font-weight: 800;
-    }
-
-    .mode-option.active {
-      background: #ffffff;
-      color: var(--ink);
-      box-shadow: 0 2px 8px rgba(31, 41, 51, 0.14);
-    }
-
     .board-wrap {
       padding: clamp(14px, 3vw, 28px);
       display: grid;
@@ -256,7 +229,15 @@
       gap: 9px;
     }
 
+    .magnet-wrap {
+      position: relative;
+      min-width: 0;
+      aspect-ratio: 1;
+    }
+
     .magnet {
+      width: 100%;
+      height: 100%;
       aspect-ratio: 1;
       min-width: 0;
       border-radius: 999px;
@@ -286,6 +267,30 @@
 
     .magnet:active {
       transform: translateY(1px) scale(0.98);
+    }
+
+    .back-chip {
+      position: absolute;
+      right: -3px;
+      top: -3px;
+      z-index: 2;
+      min-width: 34px;
+      height: 24px;
+      padding: 0 6px;
+      border-radius: 999px;
+      background: #ffffff;
+      color: var(--red);
+      border: 1px solid rgba(184, 74, 66, 0.38);
+      box-shadow: 0 4px 10px rgba(10, 30, 26, 0.24);
+      font-size: 0.72rem;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .back-chip:disabled {
+      cursor: not-allowed;
+      opacity: 0.34;
+      box-shadow: none;
     }
 
     .stage:last-child .magnet {
@@ -372,10 +377,6 @@
           <input id="stageTotal" type="number" min="2" max="8" value="2">
         </div>
         <button class="action apply" id="applyButton" type="button">反映</button>
-        <div class="mode-toggle" aria-label="操作モード">
-          <button class="mode-option active" id="forwardModeButton" type="button">進める</button>
-          <button class="mode-option" id="backModeButton" type="button">戻す</button>
-        </div>
         <button class="action" id="fullscreenButton" type="button" title="全画面表示" aria-label="全画面表示">⛶</button>
         <button class="action" id="undoButton" type="button" title="元に戻す" aria-label="元に戻す">↶</button>
         <button class="action reset" id="resetButton" type="button" title="最初に戻す" aria-label="最初に戻す">↺</button>
@@ -410,8 +411,6 @@
       end: document.querySelector("#endNumber"),
       stages: document.querySelector("#stageTotal"),
       apply: document.querySelector("#applyButton"),
-      forwardMode: document.querySelector("#forwardModeButton"),
-      backMode: document.querySelector("#backModeButton"),
       fullscreen: document.querySelector("#fullscreenButton"),
       undo: document.querySelector("#undoButton"),
       reset: document.querySelector("#resetButton"),
@@ -424,7 +423,6 @@
     const storageKey = "school-progress-magnet-board";
     let state = loadState();
     let toastTimer = null;
-    let moveMode = "forward";
 
     function loadState() {
       try {
@@ -492,7 +490,6 @@
       els.undo.disabled = state.history.length === 0;
       els.board.style.setProperty("--stage-count", state.stages);
       els.board.innerHTML = "";
-      renderMode();
 
       const numbersByStage = Array.from({ length: state.stages }, () => []);
       for (const number of getNumbers()) {
@@ -534,13 +531,29 @@
           grid.append(empty);
         } else {
           numbers.forEach((number) => {
+            const wrap = document.createElement("div");
+            wrap.className = "magnet-wrap";
+
             const button = document.createElement("button");
             button.className = "magnet";
             button.type = "button";
             button.textContent = number;
-            button.setAttribute("aria-label", `${number}番を${moveMode === "forward" ? "進める" : "戻す"}`);
-            button.addEventListener("click", () => moveNumber(number));
-            grid.append(button);
+            button.setAttribute("aria-label", `${number}番を進める`);
+            button.addEventListener("click", () => advanceNumber(number));
+
+            const backButton = document.createElement("button");
+            backButton.className = "back-chip";
+            backButton.type = "button";
+            backButton.textContent = "戻る";
+            backButton.disabled = stageIndex === 0;
+            backButton.setAttribute("aria-label", `${number}番を戻す`);
+            backButton.addEventListener("click", (event) => {
+              event.stopPropagation();
+              moveBackNumber(number);
+            });
+
+            wrap.append(button, backButton);
+            grid.append(wrap);
           });
         }
 
@@ -558,14 +571,6 @@
       const percent = numbers.length ? Math.round((completed / numbers.length) * 100) : 0;
       els.summary.textContent = `完了 ${completed} / ${numbers.length}`;
       els.progress.style.width = `${percent}%`;
-    }
-
-    function moveNumber(number) {
-      if (moveMode === "back") {
-        moveBackNumber(number);
-      } else {
-        advanceNumber(number);
-      }
     }
 
     function advanceNumber(number) {
@@ -598,20 +603,6 @@
       saveState();
       render();
       showToast(`${number}番 → ${state.labels[to]}`);
-    }
-
-    function setMoveMode(nextMode) {
-      moveMode = nextMode;
-      renderMode();
-      render();
-      showToast(nextMode === "forward" ? "進めるモード" : "戻すモード");
-    }
-
-    function renderMode() {
-      els.forwardMode.classList.toggle("active", moveMode === "forward");
-      els.backMode.classList.toggle("active", moveMode === "back");
-      els.forwardMode.setAttribute("aria-pressed", String(moveMode === "forward"));
-      els.backMode.setAttribute("aria-pressed", String(moveMode === "back"));
     }
 
     function applySettings() {
@@ -675,8 +666,6 @@
     }
 
     els.apply.addEventListener("click", applySettings);
-    els.forwardMode.addEventListener("click", () => setMoveMode("forward"));
-    els.backMode.addEventListener("click", () => setMoveMode("back"));
     els.fullscreen.addEventListener("click", toggleFullscreen);
     els.undo.addEventListener("click", undo);
     els.reset.addEventListener("click", resetBoard);
